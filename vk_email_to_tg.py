@@ -257,17 +257,28 @@ def check_once(imap):
 
 def run_once():
     """Одна проверка и выход — для бесплатных Cron (Render Cron / GitHub Actions)."""
-    imap = imaplib.IMAP4_SSL(IMAP_HOST)
-    imap.login(EMAIL_LOGIN, EMAIL_APP_PASSWORD)
-    imap.select("INBOX")
-    print(f"[OK] IMAP {IMAP_HOST} подключён как {EMAIL_LOGIN} (once)", flush=True)
-    check_once(imap)
-    try:
-        imap.close()
-        imap.logout()
-    except Exception:
-        pass
-    print("[OK] Once done.", flush=True)
+    import socket
+    last_err = None
+    for attempt in range(1, 4):
+        try:
+            imap = imaplib.IMAP4_SSL(IMAP_HOST)
+            imap.login(EMAIL_LOGIN, EMAIL_APP_PASSWORD)
+            imap.select("INBOX")
+            print(f"[OK] IMAP {IMAP_HOST} подключён как {EMAIL_LOGIN} (once)", flush=True)
+            check_once(imap)
+            try:
+                imap.close()
+                imap.logout()
+            except Exception:
+                pass
+            print("[OK] Once done.", flush=True)
+            return
+        except (socket.gaierror, socket.timeout, OSError) as e:
+            last_err = e
+            print(f"[WARN] Сеть ({e}), попытка {attempt}/3, жду 15 сек…", flush=True)
+            time.sleep(15)
+    print(f"[FATAL] Не смог подключиться к {IMAP_HOST}: {last_err}", flush=True)
+    raise SystemExit(1)
 
 
 def run():
