@@ -1,0 +1,19 @@
+services:
+  - type: worker
+    name: vk-email-tg-notifier
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python vk_email_to_tg.py
+    envVars:
+      - key: TG_BOT_TOKEN
+        sync: false
+      - key: TG_CHAT_ID
+        sync: false
+      - key: EMAIL_IMAP
+        value: imap.gmail.com
+      - key: EMAIL_LOGIN
+        sync: false
+      - key: EMAIL_APP_PASSWORD
+        sync: false
+      - key: CHECK_INTERVAL
+        value: 30
