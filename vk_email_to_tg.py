@@ -258,6 +258,10 @@ def check_once(imap):
 def run_once():
     """Одна проверка и выход — для бесплатных Cron (Render Cron / GitHub Actions)."""
     import socket
+    # быстрая проверка: в адресе сервера не должно быть @ и пробелов
+    if "@" in IMAP_HOST or " " in IMAP_HOST or "." not in IMAP_HOST:
+        print(f"[FATAL] EMAIL_IMAP похож на ошибку (там должен быть хост вида imap.gmail.com). Проверь секрет.", flush=True)
+        raise SystemExit(1)
     last_err = None
     for attempt in range(1, 4):
         try:
