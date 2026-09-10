@@ -28,7 +28,7 @@ TG_CHAT_ID = os.getenv("TG_CHAT_ID", "").strip()
 
 IMAP_HOST = os.getenv("EMAIL_IMAP", "imap.gmail.com").strip()
 EMAIL_LOGIN = os.getenv("EMAIL_LOGIN", "").strip()
-EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD", "").strip()
+EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD", "").strip().replace(" ", "")
 CHECK_INTERVAL = int(os.getenv("CHECK_INTERVAL", "30"))
 
 if not TG_BOT_TOKEN or not TG_CHAT_ID:
@@ -50,7 +50,15 @@ def tg_send(text: str):
         "parse_mode": "HTML",
         "disable_web_page_preview": True,
     }, timeout=30)
-    r.raise_for_status()
+    try:
+        r.raise_for_status()
+    except Exception as e:
+        # показываем ответ Telegram (там точная причина: chat not found / blocked / parse)
+        try:
+            print(f"[TG-ERR] {r.status_code} {r.text[:300]}", flush=True)
+        except Exception:
+            pass
+        raise
     j = r.json()
     if not j.get("ok"):
         raise RuntimeError(f"Telegram: {j}")
