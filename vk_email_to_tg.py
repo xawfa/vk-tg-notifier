@@ -79,33 +79,32 @@ def decode_mime(s: str) -> str:
 
 
 def get_body(msg) -> str:
-    body = ""
+    plain = ""
+    html_t = ""
     if msg.is_multipart():
         for part in msg.walk():
             ctype = part.get_content_type()
             disp = str(part.get("Content-Disposition", ""))
-            if ctype == "text/plain" and "attachment" not in disp:
-                try:
-                    payload = part.get_payload(decode=True)
-                    if not isinstance(payload, (bytes, bytearray)):
-                        continue
-                    charset = part.get_content_charset() or "utf-8"
-                    body += bytes(payload).decode(charset, errors="replace")
-                except Exception:
-                    pass
-        if not body:
-            for part in msg.walk():
-                if part.get_content_type() == "text/html":
-                    try:
-                        payload = part.get_payload(decode=True)
-                        if not isinstance(payload, (bytes, bytearray)):
-                            continue
-                        charset = part.get_content_charset() or "utf-8"
-                        h = bytes(payload).decode(charset, errors="replace")
-                        h = re.sub(r"<[^>]+>", " ", h)
-                        body += h
-                    except Exception:
-                        pass
+            if "attachment" in disp:
+                continue
+            try:
+                payload = part.get_payload(decode=True)
+                if not isinstance(payload, (bytes, bytearray)):
+                    continue
+                charset = part.get_content_charset() or "utf-8"
+                txt = bytes(payload).decode(charset, errors="replace")
+            except Exception:
+                continue
+            if ctype == "text/plain":
+                plain += txt + "\n"
+            elif ctype == "text/html":
+                h = re.sub(r"<[^>]+>", " ", txt)
+                h = html.unescape(h)
+                html_t += h + "\n"
+        # карточки сообщений лежат в HTML-части — клеим её тоже, парсер сам найдёт
+        body = plain + "\n" + html_t
+        if not body.strip():
+            body = plain or html_t
     else:
         try:
             payload = msg.get_payload(decode=True)
@@ -153,10 +152,10 @@ def is_vk_message(from_: str, subject: str, body: str) -> bool:
 
 def short_digest(subject: str, body: str) -> str:
     """Коротко: кто написал + кусок текста, без 'Здравствуйте/С уважением/настройки'."""
-    # Склеиваем переносы: в HTML-письмах имя и текст часто на разных строках
+    # Склеиваем переносы: в HTML-письмах имя и текст часто на разных строках.
+    # Мусор вытираем заменой (не обрезкой — иначе убьём HTML-часть после plain-футера).
     flat = re.sub(r"\s+", " ", body)
-    # режем мусорные хвосты
-    flat = re.split(r"показать все|отписаться от рассылки|поменять настройки|с уважением", flat, flags=re.IGNORECASE)[0]
+    flat = re.sub(r"показать все|отписаться от рассылки|поменять настройки|с уважением|администрация вконтакте|settings\?act=notify|здравствуйте", " ", flat, flags=re.IGNORECASE)
 
     # режем на куски по маркеру "отправил(а) вам сообщение" / "написал(а) вам"
     marker = re.compile(r"отправил[аи]?\s+вам\s+сообщение|написал[аи]?\s+вам", re.IGNORECASE)
