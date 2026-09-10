@@ -153,41 +153,29 @@ def is_vk_message(from_: str, subject: str, body: str) -> bool:
 
 def short_digest(subject: str, body: str) -> str:
     """Коротко: кто написал + кусок текста, без 'Здравствуйте/С уважением/настройки'."""
-    lines = [ln.strip() for ln in body.split("\n")]
-    trash = ("здравствуйте", "с уважением", "администрация вконтакте",
-             "поменять настройки", "settings?act=notify", "отписаться",
-             "показать все", "вы получили:", "вы получили")
-    clean = []
-    for ln in lines:
-        if not ln:
-            continue
-        low = ln.lower()
-        if any(t in low for t in trash):
-            continue
-        if low.startswith("http"):
-            continue
-        clean.append(ln)
+    # Склеиваем переносы: в HTML-письмах имя и текст часто на разных строках
+    flat = re.sub(r"\s+", " ", body)
+    # режем мусорные хвосты
+    flat = re.split(r"показать все|отписаться от рассылки|поменять настройки|с уважением", flat, flags=re.IGNORECASE)[0]
 
-    # ищем строки вида "Имя отправил вам сообщение ТЕКСТ"
+    # режем на куски по маркеру "отправил(а) вам сообщение" / "написал(а) вам"
+    marker = re.compile(r"отправил[аи]?\s+вам\s+сообщение|написал[аи]?\s+вам", re.IGNORECASE)
+    chunks = marker.split(flat)
     found = []
-    pat = re.compile(r"(.+?)\s+отправил[аи]?\s+вам\s+сообщение\s*(.*)", re.IGNORECASE)
-    for ln in clean:
-        m = pat.search(ln)
-        if m:
-            name = m.group(1).strip()
-            # бывает дубль "Володя Обладает Володя Обладает" — схлопываем повторы
-            parts = name.split()
-            if len(parts) % 2 == 0 and len(parts) >= 2:
-                half = len(parts) // 2
-                if parts[:half] == parts[half:]:
-                    name = " ".join(parts[:half])
-            snippet = m.group(2).strip()
-            # дата в хвосте ("10 сен в 2:44") — режем
-            snippet = re.sub(r"\d{1,2}\s+\w+\s+в\s+\d{1,2}:\d{2}$", "", snippet).strip()
-            found.append((name, snippet))
+    if len(chunks) > 1:
+        for i in range(1, len(chunks)):
+            before = chunks[i - 1]
+            after = chunks[i]
+            # имя — последние 2-3 слова перед маркером (без дублей)
+            words = before.strip().split()
+            name = " ".join(words[-2:]) if len(words) >= 2 else (words[-1] if words else "")
+            # snippet — до даты ("10 сен в 14:26") или до 200 символов
+            snippet = re.split(r"\d{1,2}\s+\S+\s+в\s+\d{1,2}:\d{2}", after)[0].strip()
+            snippet = snippet[:200]
+            if name:
+                found.append((name, snippet))
 
     if found:
-        # группируем по имени
         by_name: dict = {}
         for name, snippet in found:
             by_name.setdefault(name, [])
@@ -204,10 +192,10 @@ def short_digest(subject: str, body: str) -> str:
         head = f"💬 <b>ВК: {n} нов. ({len(by_name)} чат.)</b>"
         return head + "\n" + "\n".join(rows)
 
-    # запасной: первые 2 осмысленные строки
-    head = subject if subject.strip().lower() not in ("vk", "вконтакте", "") else "Новые сообщения"
-    tail = "\n".join(html.escape(ln) for ln in clean[:3])[:400]
-    return f"💬 <b>{html.escape(head)[:80]}</b>\n" + tail
+    # запасной: только заголовок + ссылка (без дампа тела)
+    m = re.search(r"(\d+)\s+новых?\s+личных?\s+сообщени", subject + " " + flat, re.IGNORECASE)
+    n = m.group(0) if m else "новые"
+    return f"💬 <b>ВК: {html.escape(n)}</b>"
 
 
 def check_once(imap):
